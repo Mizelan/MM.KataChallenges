@@ -6,6 +6,22 @@ using System.Threading.Tasks;
 
 namespace BowlingScoreCalculator
 {
+    // RollRecorder
+    //  Roll
+    // FrameMaker
+    //  Rolls -> Frames
+    // Frame
+    //   Rolls
+    //   FrameResult
+    //   Score?
+    // GameFlow
+    //  FrameMaker -> GameFlow
+    // GameScoreCalculator
+    //  GameFlow
+    //  RollRecorder
+    //  FrameMaker ; GetFrames[]
+    //  Score : GetFrames[].Sum()
+
     class Program
     {
         static void Main(string[] args)

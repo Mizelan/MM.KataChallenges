@@ -17,7 +17,7 @@ namespace BowlingScoreCalculator
             Console.WriteLine("----------------------------------------------------");
             Console.WriteLine();
 
-            scoreCalculator = new ScoreCalculator();
+            scoreCalculator = new ScoreCalculator(new GameConfig { MaxFrame = 10 });
             scoreCalculator.StartGame();
 
             bool willExit = false;
@@ -38,7 +38,7 @@ namespace BowlingScoreCalculator
                     break;
 
                     default:
-                    if (scoreCalculator.IsGameEnded())
+                    if (scoreCalculator.IsGameOver())
                     {
                         Console.WriteLine("이미 게임이 종료되었습니다. (restart 명령어로 다시 시작할 수 있습니다.)");
                     }
@@ -46,9 +46,10 @@ namespace BowlingScoreCalculator
                     {
                         try
                         {
-                            var prevSeq = scoreCalculator.CurrentFrameSeq;
-                            scoreCalculator.KnockDownPin(number);
-                            if (prevSeq != scoreCalculator.CurrentFrameSeq)
+                            scoreCalculator.PushRoll(number);
+                            var frame = scoreCalculator.Frames.Last();
+                            if (frame.IsLastFrame ||
+                                frame.FrameResult != FrameResultType.InProgress)
                             {
                                 WriteProgress();
                             }
@@ -70,30 +71,39 @@ namespace BowlingScoreCalculator
 
         void WriteSessionStatus()
         {
-            if (scoreCalculator.IsGameEnded())
+            if (scoreCalculator.IsGameOver())
             {
                 Console.Write($"게임 완료. Score:{scoreCalculator.Score}> ");
                 return;
             }
 
-            var ballText = "";
-            switch (scoreCalculator.FrameStatus)
+            var frameRollCount = 0;
+            
+            if (scoreCalculator.Frames != null)
             {
-                case GameFrameStatus.FirstBall:
-                ballText = "첫번째";
-                break;
-                case GameFrameStatus.SecondBall:
-                ballText = "두번째";
-                break;
-                case GameFrameStatus.ThirdBall:
-                ballText = "세번째";
-                break;
-                default:
-                ballText = $"({scoreCalculator.FrameStatus.ToString()})";
-                break;
+                var currentFrame = scoreCalculator.Frames.Last();
+                if (currentFrame != null &&
+                    currentFrame.Rolls != null)
+                {
+
+                    frameRollCount = currentFrame.Rolls.Count();
+                }
+            }
+
+            var frameSeqText = "";
+            if(scoreCalculator.Frames != null &&
+               scoreCalculator.Frames.Count() > 0 &&
+               scoreCalculator.Frames.Last().IsLastFrame)
+            {
+                frameSeqText = "LAST";
+            }
+            else
+            {
+                frameSeqText = (scoreCalculator.FrameSeq + 1).ToString();
             }
             
-            Console.Write($"Frame:{scoreCalculator.CurrentFrameSeq}, Ball:{ballText}, Score:{scoreCalculator.Score}> ");
+
+            Console.Write($"Frame:{frameSeqText}, Ball:{frameRollCount + 1}, Score:{scoreCalculator.Score}> ");
         }
 
         void WriteProgress()
@@ -102,8 +112,37 @@ namespace BowlingScoreCalculator
             int count = 1;
             foreach (var frame in scoreCalculator.Frames)
             {
-                var pinCounts = frame.PinCounts.Select(x => x.ToString());
-                Console.WriteLine($"\t#{count++} {frame.Score}점 다운핀수={string.Join(",", pinCounts)})");
+                var pinCountTexts = frame.Rolls.Select(x => x.DownedPinCount.ToString()).ToArray();
+
+                if (frame.IsLastFrame)
+                {
+                    var frameResults = frame.FrameResults.ToArray();
+                    for (int i=0; i< frameResults.Length; i++)
+                    {
+                        if (frameResults[i] == FrameResultType.Spare)
+                        {
+                            pinCountTexts[i] = "/";
+                        }
+                        else if (frameResults[i] == FrameResultType.Strike)
+                        {
+                            pinCountTexts[i] = "X";
+                        }
+                    }
+                }
+                else
+                {
+                    if (frame.FrameResult == FrameResultType.Spare)
+                    {
+                        pinCountTexts[pinCountTexts.Count() - 1] = "/";
+                    }
+                    else if(frame.FrameResult == FrameResultType.Strike)
+                    {
+                        pinCountTexts[pinCountTexts.Count() - 1] = "X";
+                    }
+                }
+
+                var scoreText = frame.Score.HasValue ? frame.Score.Value.ToString() : "?";
+                Console.WriteLine($"\t#{count++, -2} Pin:{{ {string.Join(",", pinCountTexts), -5} }} Score:{scoreText}");
             }
             Console.WriteLine();
         }

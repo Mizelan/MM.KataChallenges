@@ -1,160 +1,102 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 
 namespace BowlingScoreCalculator.Logics
 {
     public class ScoreCalculator
     {
-        public readonly GameConfig GameConfig;
-        public GameFrameStatus FrameStatus { get; private set; }
-        public int Score => Frames.Sum(x => x.Score);
-        public int CurrentFrameSeq => Frames.Count + 1;
-        public IReadOnlyList<GameFrame> Frames => frames;
-        List<GameFrame> frames = new List<GameFrame>();
-        GameFrame currentFrame;
-                
+        public int FrameSeq => Frames == null ? 0 : Frames.Count();
+        public int Score => Frames == null ? 0 : Frames.Where(x => x.Score.HasValue).Sum(x => x.Score.Value);
+        public Frame[] Frames { get; private set; }
+        readonly GameConfig gameConfig;
+        readonly RollRecorder rollRecorder;
+        readonly FrameMaker frameMaker;
+
         public ScoreCalculator(GameConfig gameConfig = null)
         {
-            this.GameConfig = gameConfig ?? new GameConfig();
+            this.gameConfig = gameConfig ?? new GameConfig();
+            this.rollRecorder = new RollRecorder();
+            this.frameMaker = new FrameMaker(rollRecorder, this.gameConfig);
         }
-
-        public bool IsGameEnded() => FrameStatus == GameFrameStatus.GameEnded;
-        public bool IsLastFrame() => CurrentFrameSeq == GameConfig.MaxFrame;
-        public int RemainCurrentFramePinCount() => GameConfig.MaxPinCount - currentFrame.PinCounts.Sum();
 
         public void StartGame()
         {
-            frames.Clear();
-            StartNewFrame();
+            rollRecorder.Reset();
+            Frames = null;
         }
 
-        void StartNewFrame()
+        public void PushRoll(int pinCount)
         {
-            currentFrame = new GameFrame(GameConfig.MaxPinCount);
-            FrameStatus = GameFrameStatus.FirstBall;
-        }
-        
-        public void KnockDownPin(int count)
-        {
-            if (IsGameEnded())
+            if (IsGameOver())
             {
-                throw new Exception("게임이 이미 종료 되었습니다.");
+                throw new InvalidOperationException("이미 게임이 종료되었습니다.");
             }
 
-            if (!IsLastFrame() &&
-                currentFrame.PinCounts.Sum() + count > GameConfig.MaxPinCount)
-            {
-                throw new Exception("넘어진 핀이 남은 핀 갯수보다 많습니다.");
-            }
-
-            currentFrame.PinCounts.Add(count);
-            FrameStatus = CalcNextFrameStatus();
-            RecordPrevFrameScore();
-
-            if (FrameStatus == GameFrameStatus.FrameEnded ||
-                FrameStatus == GameFrameStatus.GameEnded)
-            {
-                RecordCurrentFrame();
-            }
-
-            if (FrameStatus == GameFrameStatus.FrameEnded)
-            {
-                StartNewFrame();
-            }
+            rollRecorder.Record(pinCount);
+            Frames = frameMaker.GetFrames().ToArray();
+            FillFramesScore(); 
         }
 
-        void RecordCurrentFrame()
+        void FillFramesScore()
         {
-            currentFrame.ResultType = currentFrame.GetFrameResultType();
-            if (currentFrame.ResultType == GameFrameResultType.Open)
+            var framesEnumerator = Frames.GetEnumerator();
+            while (framesEnumerator.MoveNext())
             {
-                currentFrame.Score = currentFrame.PinCounts.Sum();
-            }
-            frames.Add(currentFrame);
-        }
-
-        void RecordPrevFrameScore()
-        {
-            var lastFrame = Frames.LastOrDefault();
-            var nextLastFrame = Frames.Count >= 2 ? Frames.Reverse().Skip(1).First() : null;
-            if (nextLastFrame != null)
-            {
-                if (nextLastFrame.IsStrike())
+                var currentFrame = framesEnumerator.Current as Frame;
+                int bonusNextRollCount = 0;
+                if (currentFrame.FrameResult == FrameResultType.Spare)
                 {
-                    if (lastFrame.IsStrike())
-                    {
-                        nextLastFrame.Score = GameConfig.MaxPinCount * 2 + currentFrame.PinCounts.First();
-                    }
-                    else
-                    {
-                        if (currentFrame.PinCounts.Count >= 2)
-                        {
-                            nextLastFrame.Score = GameConfig.MaxPinCount + currentFrame.PinCounts.Take(2).Sum();
-                        }
-                    }
+                    bonusNextRollCount = 1;
                 }
-            }
-            
-            if (lastFrame != null)
-            {
-                if (lastFrame.IsStrike())
+                else if (currentFrame.FrameResult == FrameResultType.Strike)
                 {
-                    if (currentFrame.PinCounts.Count >= 2)
-                    {
-                        lastFrame.Score = GameConfig.MaxPinCount + currentFrame.PinCounts.Take(2).Sum();
-                    }
+                    bonusNextRollCount = 2;
                 }
-                else if (lastFrame.IsSpare())
+                else if (!currentFrame.IsLastFrame &&
+                        currentFrame.FrameResult == FrameResultType.InProgress)
                 {
-                    lastFrame.Score = GameConfig.MaxPinCount + currentFrame.PinCounts.First();
+                    continue;
                 }
-            }
 
-            if (FrameStatus == GameFrameStatus.GameEnded)
-            {
-                currentFrame.Score = currentFrame.PinCounts.Sum();
-            }
-        }
-        
-        GameFrameStatus CalcNextFrameStatus()
-        {
-            switch (FrameStatus)
-            {
-                case GameFrameStatus.FirstBall:
-                if (currentFrame.IsStrike())
+                var baseScore = currentFrame.Rolls.Sum(x => x.DownedPinCount);
+                var nextRolls = currentFrame.Rolls.Last().GetNextRolls(bonusNextRollCount);
+                if (!IsGameOver() && nextRolls.Count() != bonusNextRollCount)
                 {
-                    if (IsLastFrame())
-                    {
-                        return GameFrameStatus.SecondBall;
-                    }
-                    return GameFrameStatus.FrameEnded;
-                }
-                return GameFrameStatus.SecondBall;
-
-                case GameFrameStatus.SecondBall:
-                if (IsLastFrame())
-                {
-                    if (currentFrame.IsStrike() || currentFrame.IsSpare())
-                    {
-                        return GameFrameStatus.ThirdBall;
-                    }
-                    else
-                    {
-                        return GameFrameStatus.GameEnded;
-                    }
+                    // 보너스에 충분한 볼이 모이지 않았음
+                    currentFrame.Score = null;
                 }
                 else
                 {
-                    return GameFrameStatus.FrameEnded;
+                    var bonusScore = nextRolls.Sum(x => x.DownedPinCount);
+                    currentFrame.Score = baseScore + bonusScore;
                 }
-
-                case GameFrameStatus.ThirdBall:
-                return GameFrameStatus.GameEnded;
-
-                default:
-                throw new Exception($"다음 프레임 상태를 어떻게 처리할지 정의되지 않았습니다: {FrameStatus}");
             }
         }
+
+        public bool IsGameOver()
+        {
+            if (Frames == null)
+            {
+                return false;
+            }
+
+            if (Frames.Count() < gameConfig.MaxFrame)
+            {
+                return false;
+            }
+
+            if (Frames.Last().Rolls.Count() >= 3)
+            {
+                return true;
+            }
+
+            if (Frames.Last().FrameResults.Contains(FrameResultType.Open))
+            {
+                return true;
+            }
+
+            return false;
+        }
     }
+    
 }

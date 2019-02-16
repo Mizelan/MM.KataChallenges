@@ -63,16 +63,20 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Logics\Frame.cs" />
+    <Compile Include="Logics\FrameMaker.cs" />
+    <Compile Include="Logics\FrameResultResolver.cs" />
     <Compile Include="Logics\GameConfig.cs" />
-    <Compile Include="Logics\GameFrame.cs" />
-    <Compile Include="Logics\GameFrameResultType.cs" />
-    <Compile Include="Logics\GameFrameStatus.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Logics\Roll.cs" />
+    <Compile Include="Logics\RollExtension.cs" />
+    <Compile Include="Logics\RollRecorder.cs" />
     <Compile Include="Logics\ScoreCalculator.cs" />
-    <Compile Include="Unittest\ScoreCalculateTests.cs" />
-    <Compile Include="Unittest\GameFrameTests.cs" />
-    <Compile Include="Unittest\GameFlowTests.cs" />
-    <Compile Include="Unittest\ScoreCalculatorTestExtensions.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Unittest\FrameMakeTests_LastFrameCase.cs" />
+    <Compile Include="Unittest\FrameMakeTests.cs" />
+    <Compile Include="Unittest\FrameResultResolverTests.cs" />
+    <Compile Include="Unittest\RollRecorderTests.cs" />
+    <Compile Include="Unittest\ScoreCalculatorTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
